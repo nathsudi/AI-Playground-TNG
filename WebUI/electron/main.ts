@@ -206,6 +206,11 @@ if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
   app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('no-sandbox')
+  // safeStorage (used for channel/API-key secrets) backs onto a Linux
+  // OS keyring (gnome-libsecret/kwallet) that headless/minimal desktops don't
+  // run. Force the "basic" backend — see the setUsePlainTextEncryption call
+  // below for why this switch alone isn't enough.
+  app.commandLine.appendSwitch('password-store', 'basic')
 }
 const singleInstanceLock = app.requestSingleInstanceLock()
 
@@ -2867,6 +2872,15 @@ app.whenReady().then(async () => {
     'electron-backend',
     true,
   )
+
+  // The 'basic' password-store switch (set above) only makes Chromium select
+  // the BASIC_TEXT os_crypt backend on Linux — it still won't *initialize*
+  // that backend, and safeStorage.isEncryptionAvailable() stays false, unless
+  // plaintext-backed encryption is explicitly opted into here. Must run after
+  // 'ready' and before any encryptString/decryptString call.
+  if (process.platform === 'linux') {
+    safeStorage.setUsePlainTextEncryption(true)
+  }
 
   /**Single instance processing */
   if (!singleInstanceLock) {
